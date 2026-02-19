@@ -30,7 +30,7 @@
 
 #include "ubasic.h"
 #include "tokenizer.h"
-#include <circle/string.h>
+#include <string.h>
 
 /* Redirections for Circle / Bare Metal */
 extern void circle_basic_print(const char *s);
