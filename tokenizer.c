@@ -28,18 +28,15 @@
  *
  */
 
-#define DEBUG 0
+#include "tokenizer.h"
+#include <circle/string.h>
 
+#define DEBUG 0
 #if DEBUG
-#define DEBUG_PRINTF(...)  printf(__VA_ARGS__)
+#define DEBUG_PRINTF(...) 
 #else
 #define DEBUG_PRINTF(...)
 #endif
-
-#include "tokenizer.h"
-#include <string.h>
-#include <ctype.h>
-#include <stdlib.h>
 
 static char const *ptr, *nextptr;
 
@@ -69,78 +66,68 @@ static const struct keyword_token keywords[] = {
   {"peek", TOKENIZER_PEEK},
   {"poke", TOKENIZER_POKE},
   {"end", TOKENIZER_END},
-  {NULL, TOKENIZER_ERROR}
+  {(void*)0, TOKENIZER_ERROR}
 };
 
+/* --- Internal Bare Metal Helpers --- */
+
+static int is_digit(char c) {
+    return (c >= '0' && c <= '9');
+}
+
+static int custom_atoi(const char *s) {
+    int res = 0;
+    while (is_digit(*s)) {
+        res = res * 10 + (*s - '0');
+        s++;
+    }
+    return res;
+}
+
+static char* custom_strchr(const char *s, int c) {
+    while (*s != (char)c) {
+        if (!*s++) return (void*)0;
+    }
+    return (char *)s;
+}
+
 /*---------------------------------------------------------------------------*/
-static int
-singlechar(void)
-{
-  if(*ptr == '\n') {
-    return TOKENIZER_CR;
-  } else if(*ptr == ',') {
-    return TOKENIZER_COMMA;
-  } else if(*ptr == ';') {
-    return TOKENIZER_SEMICOLON;
-  } else if(*ptr == '+') {
-    return TOKENIZER_PLUS;
-  } else if(*ptr == '-') {
-    return TOKENIZER_MINUS;
-  } else if(*ptr == '&') {
-    return TOKENIZER_AND;
-  } else if(*ptr == '|') {
-    return TOKENIZER_OR;
-  } else if(*ptr == '*') {
-    return TOKENIZER_ASTR;
-  } else if(*ptr == '/') {
-    return TOKENIZER_SLASH;
-  } else if(*ptr == '%') {
-    return TOKENIZER_MOD;
-  } else if(*ptr == '(') {
-    return TOKENIZER_LEFTPAREN;
-  } else if(*ptr == '#') {
-    return TOKENIZER_HASH;
-  } else if(*ptr == ')') {
-    return TOKENIZER_RIGHTPAREN;
-  } else if(*ptr == '<') {
-    return TOKENIZER_LT;
-  } else if(*ptr == '>') {
-    return TOKENIZER_GT;
-  } else if(*ptr == '=') {
-    return TOKENIZER_EQ;
-  }
+static int singlechar(void) {
+  if(*ptr == '\n') return TOKENIZER_CR;
+  if(*ptr == ',')  return TOKENIZER_COMMA;
+  if(*ptr == ';')  return TOKENIZER_SEMICOLON;
+  if(*ptr == '+')  return TOKENIZER_PLUS;
+  if(*ptr == '-')  return TOKENIZER_MINUS;
+  if(*ptr == '&')  return TOKENIZER_AND;
+  if(*ptr == '|')  return TOKENIZER_OR;
+  if(*ptr == '*')  return TOKENIZER_ASTR;
+  if(*ptr == '/')  return TOKENIZER_SLASH;
+  if(*ptr == '%')  return TOKENIZER_MOD;
+  if(*ptr == '(')  return TOKENIZER_LEFTPAREN;
+  if(*ptr == '#')  return TOKENIZER_HASH;
+  if(*ptr == ')')  return TOKENIZER_RIGHTPAREN;
+  if(*ptr == '<')  return TOKENIZER_LT;
+  if(*ptr == '>')  return TOKENIZER_GT;
+  if(*ptr == '=')  return TOKENIZER_EQ;
   return 0;
 }
+
 /*---------------------------------------------------------------------------*/
-static int
-get_next_token(void)
-{
+static int get_next_token(void) {
   struct keyword_token const *kt;
   int i;
 
-  DEBUG_PRINTF("get_next_token(): '%s'\n", ptr);
+  if(*ptr == 0) return TOKENIZER_ENDOFINPUT;
 
-  if(*ptr == 0) {
-    return TOKENIZER_ENDOFINPUT;
-  }
-
-  if(isdigit(*ptr)) {
+  if(is_digit(*ptr)) {
     for(i = 0; i < MAX_NUMLEN; ++i) {
-      if(!isdigit(ptr[i])) {
+      if(!is_digit(ptr[i])) {
         if(i > 0) {
           nextptr = ptr + i;
           return TOKENIZER_NUMBER;
-        } else {
-          DEBUG_PRINTF("get_next_token: error due to too short number\n");
-          return TOKENIZER_ERROR;
-        }
-      }
-      if(!isdigit(ptr[i])) {
-        DEBUG_PRINTF("get_next_token: error due to malformed number\n");
-        return TOKENIZER_ERROR;
+        } else return TOKENIZER_ERROR;
       }
     }
-    DEBUG_PRINTF("get_next_token: error due to too long number\n");
     return TOKENIZER_ERROR;
   } else if(singlechar()) {
     nextptr = ptr + 1;
@@ -149,11 +136,11 @@ get_next_token(void)
     nextptr = ptr;
     do {
       ++nextptr;
-    } while(*nextptr != '"');
-    ++nextptr;
+    } while(*nextptr != '"' && *nextptr != 0);
+    if (*nextptr == '"') ++nextptr;
     return TOKENIZER_STRING;
   } else {
-    for(kt = keywords; kt->keyword != NULL; ++kt) {
+    for(kt = keywords; kt->keyword != (void*)0; ++kt) {
       if(strncmp(ptr, kt->keyword, strlen(kt->keyword)) == 0) {
         nextptr = ptr + strlen(kt->keyword);
         return kt->token;
@@ -166,107 +153,82 @@ get_next_token(void)
     return TOKENIZER_VARIABLE;
   }
 
-
   return TOKENIZER_ERROR;
 }
+
 /*---------------------------------------------------------------------------*/
-void
-tokenizer_goto(const char *program)
-{
+void tokenizer_goto(const char *program) {
   ptr = program;
   current_token = get_next_token();
 }
+
 /*---------------------------------------------------------------------------*/
-void
-tokenizer_init(const char *program)
-{
+void tokenizer_init(const char *program) {
   tokenizer_goto(program);
-  current_token = get_next_token();
 }
+
 /*---------------------------------------------------------------------------*/
-int
-tokenizer_token(void)
-{
+int tokenizer_token(void) {
   return current_token;
 }
+
 /*---------------------------------------------------------------------------*/
-void
-tokenizer_next(void)
-{
+void tokenizer_next(void) {
+  if(tokenizer_finished()) return;
 
-  if(tokenizer_finished()) {
-    return;
-  }
-
-  DEBUG_PRINTF("tokenizer_next: %p\n", nextptr);
   ptr = nextptr;
-
-  while(*ptr == ' ') {
+  while(*ptr == ' ' || *ptr == '\t' || *ptr == '\r') {
     ++ptr;
   }
   current_token = get_next_token();
 
   if(current_token == TOKENIZER_REM) {
-      while(!(*nextptr == '\n' || tokenizer_finished())) {
+      while(!(*nextptr == '\n' || *nextptr == 0)) {
         ++nextptr;
       }
-      if(*nextptr == '\n') {
-        ++nextptr;
-      }
+      if(*nextptr == '\n') ++nextptr;
       tokenizer_next();
   }
+}
 
-  DEBUG_PRINTF("tokenizer_next: '%s' %d\n", ptr, current_token);
-  return;
-}
 /*---------------------------------------------------------------------------*/
-VARIABLE_TYPE
-tokenizer_num(void)
-{
-  return atoi(ptr);
+VARIABLE_TYPE tokenizer_num(void) {
+  return (VARIABLE_TYPE)custom_atoi(ptr);
 }
+
 /*---------------------------------------------------------------------------*/
-void
-tokenizer_string(char *dest, int len)
-{
+void tokenizer_string(char *dest, int len) {
   char *string_end;
   int string_len;
 
-  if(tokenizer_token() != TOKENIZER_STRING) {
-    return;
-  }
-  string_end = strchr(ptr + 1, '"');
-  if(string_end == NULL) {
-    return;
-  }
+  if(tokenizer_token() != TOKENIZER_STRING) return;
+
+  string_end = custom_strchr(ptr + 1, '"');
+  if(string_end == (void*)0) return;
+
   string_len = string_end - ptr - 1;
-  if(len < string_len) {
-    string_len = len;
-  }
+  if(len < string_len) string_len = len;
+
   memcpy(dest, ptr + 1, string_len);
   dest[string_len] = 0;
 }
+
 /*---------------------------------------------------------------------------*/
-void
-tokenizer_error_print(void)
-{
-  DEBUG_PRINTF("tokenizer_error_print: '%s'\n", ptr);
+void tokenizer_error_print(void) {
+  // Can be mapped to Circle Logger if needed
 }
+
 /*---------------------------------------------------------------------------*/
-int
-tokenizer_finished(void)
-{
+int tokenizer_finished(void) {
   return *ptr == 0 || current_token == TOKENIZER_ENDOFINPUT;
 }
+
 /*---------------------------------------------------------------------------*/
-int
-tokenizer_variable_num(void)
-{
+int tokenizer_variable_num(void) {
   return *ptr - 'a';
 }
+
 /*---------------------------------------------------------------------------*/
-char const *
-tokenizer_pos(void)
-{
+char const * tokenizer_pos(void) {
     return ptr;
 }
