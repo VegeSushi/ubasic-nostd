@@ -36,6 +36,12 @@
 extern void circle_basic_print(const char *s);
 extern void circle_basic_print_num(int n);
 
+static void (*poke_ptr)(VARIABLE_TYPE, VARIABLE_TYPE) = NULL;
+
+void ubasic_set_poke_function(void (*f)(VARIABLE_TYPE, VARIABLE_TYPE)) {
+  poke_ptr = f;
+}
+
 #define DEBUG 0
 #if DEBUG
 #define DEBUG_PRINTF(...) 
@@ -339,13 +345,15 @@ static void peek_statement(void) {
 }
 /*---------------------------------------------------------------------------*/
 static void poke_statement(void) {
-  VARIABLE_TYPE poke_addr, value;
   accept(TOKENIZER_POKE);
-  poke_addr = expr();
+  VARIABLE_TYPE addr = expr();
   accept(TOKENIZER_COMMA);
-  value = expr();
+  VARIABLE_TYPE val = expr();
   accept(TOKENIZER_CR);
-  if(poke_function) poke_function(poke_addr, value);
+
+  if (poke_ptr != NULL) {
+    poke_ptr(addr, val);
+  }
 }
 /*---------------------------------------------------------------------------*/
 static void end_statement(void) {
