@@ -29,7 +29,7 @@
  */
 
 #include "tokenizer.h"
-#include <circle/string.h>
+#include <string.h>
 
 #define DEBUG 0
 #if DEBUG
